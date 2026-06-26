@@ -10,6 +10,10 @@ import com.rc.readcompassbatch.repository.BookRankingRepository;
 import com.rc.readcompassbatch.repository.NotificationRepository;
 import com.rc.readcompassbatch.repository.ReviewRankingRepository;
 import com.rc.readcompassbatch.repository.UserRankingRepository;
+import com.rc.readcompassbatch.repository.projection.BookScoreAggregate;
+import com.rc.readcompassbatch.repository.projection.ReviewScoreAggregate;
+import com.rc.readcompassbatch.repository.projection.UserScoreAggregate;
+import com.rc.readcompassbatch.dto.Scored;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -65,17 +69,15 @@ public class RankingService {
     public RankingResult calculateBookRankings(Instant calculatedAt) {
         int saved = 0;
         for (PeriodType period : PeriodType.values()) {
-            List<Object[]> rows = bookRankingRepository.aggregate(period.from(calculatedAt));
+            List<BookScoreAggregate> rows = bookRankingRepository.aggregate(period.from(calculatedAt));
 
-            record Scored(UUID bookId, BigDecimal score) {}
             List<Scored> scored = new ArrayList<>();
-            for (Object[] row : rows) {
-                UUID bookId = (UUID) row[0];
-                long reviewCnt = num(row[1]).longValue();
-                double ratingAvg = num(row[2]).doubleValue();
+            for (BookScoreAggregate row : rows) {
+                long reviewCnt = num(row.getReviewCount()).longValue();
+                double ratingAvg = num(row.getRatingAvg()).doubleValue();
                 BigDecimal score = scale(reviewCnt * 0.4 + ratingAvg * 0.6);
                 if (score.signum() > 0) {
-                    scored.add(new Scored(bookId, score));
+                    scored.add(new Scored(row.getBookId(), score));
                 }
             }
             scored.sort(Comparator.comparing(Scored::score).reversed());
@@ -85,7 +87,7 @@ public class RankingService {
             for (Scored s : scored) {
                 if (rank > bookTopN) break;
                 snapshot.add(BookRanking.builder()
-                    .bookId(s.bookId())
+                    .bookId(s.id())
                     .periodType(period)
                     .rankPosition(rank++)
                     .score(s.score())
@@ -109,17 +111,15 @@ public class RankingService {
         int saved = 0;
         int notified = 0;
         for (PeriodType period : PeriodType.values()) {
-            List<Object[]> rows = reviewRankingRepository.aggregate(period.from(calculatedAt));
+            List<ReviewScoreAggregate> rows = reviewRankingRepository.aggregate(period.from(calculatedAt));
 
-            record Scored(UUID reviewId, BigDecimal score) {}
             List<Scored> scored = new ArrayList<>();
-            for (Object[] row : rows) {
-                UUID reviewId = (UUID) row[0];
-                long likeCnt = num(row[1]).longValue();
-                long commentCnt = num(row[2]).longValue();
+            for (ReviewScoreAggregate row : rows) {
+                long likeCnt = num(row.getLikeCount()).longValue();
+                long commentCnt = num(row.getCommentCount()).longValue();
                 BigDecimal score = scale(likeCnt * 0.3 + commentCnt * 0.7);
                 if (score.signum() > 0) {
-                    scored.add(new Scored(reviewId, score));
+                    scored.add(new Scored(row.getReviewId(), score));
                 }
             }
             scored.sort(Comparator.comparing(Scored::score).reversed());
@@ -130,7 +130,7 @@ public class RankingService {
                 if (rank > reviewTopN) break;
                 int rankPosition = rank++;
                 snapshot.add(ReviewRanking.builder()
-                    .reviewId(s.reviewId())
+                    .reviewId(s.id())
                     .periodType(period)
                     .rankPosition(rankPosition)
                     .score(s.score())
@@ -138,7 +138,7 @@ public class RankingService {
                     .build());
 
                 if (rankPosition <= notifyTopRank) {
-                    notified += notifyRanked(s.reviewId(), period, rankPosition);
+                    notified += notifyRanked(s.id(), period, rankPosition);
                 }
             }
             reviewRankingRepository.saveAll(snapshot);
@@ -172,18 +172,16 @@ public class RankingService {
     public RankingResult calculateUserRankings(Instant calculatedAt) {
         int saved = 0;
         for (PeriodType period : PeriodType.values()) {
-            List<Object[]> rows = userRankingRepository.aggregate(period.from(calculatedAt));
+            List<UserScoreAggregate> rows = userRankingRepository.aggregate(period.from(calculatedAt));
 
-            record Scored(UUID userId, BigDecimal score) {}
             List<Scored> scored = new ArrayList<>();
-            for (Object[] row : rows) {
-                UUID userId = (UUID) row[0];
-                double reviewScore = num(row[1]).doubleValue();
-                long givenLikes = num(row[2]).longValue();
-                long givenComments = num(row[3]).longValue();
+            for (UserScoreAggregate row : rows) {
+                double reviewScore = num(row.getReviewScore()).doubleValue();
+                long givenLikes = num(row.getGivenLikes()).longValue();
+                long givenComments = num(row.getGivenComments()).longValue();
                 BigDecimal score = scale(reviewScore * 0.5 + givenLikes * 0.2 + givenComments * 0.3);
                 if (score.signum() > 0) {
-                    scored.add(new Scored(userId, score));
+                    scored.add(new Scored(row.getUserId(), score));
                 }
             }
             scored.sort(Comparator.comparing(Scored::score).reversed());
@@ -193,7 +191,7 @@ public class RankingService {
             for (Scored s : scored) {
                 if (rank > userTopN) break;
                 snapshot.add(UserRanking.builder()
-                    .userId(s.userId())
+                    .userId(s.id())
                     .periodType(period)
                     .rankPosition(rank++)
                     .score(s.score())
@@ -210,8 +208,8 @@ public class RankingService {
     // ---------------------------------------------------------------
     // helpers
     // ---------------------------------------------------------------
-    private static Number num(Object o) {
-        return o == null ? 0L : (Number) o;
+    private static Number num(Number n) {
+        return n == null ? 0L : n;
     }
 
     private static BigDecimal scale(double value) {
