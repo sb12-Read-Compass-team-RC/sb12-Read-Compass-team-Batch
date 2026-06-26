@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>read-compass-batch — 모니터링</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <style>
+    body { font-family: monospace; padding: 30px; background: #f5f5f5; }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    h2 { font-size: 16px; margin: 24px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+    p.desc { color: #555; font-size: 13px; margin: 0 0 16px; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
+    th, td { border: 1px solid #bbb; padding: 8px 12px; text-align: left; font-size: 14px; }
+    th { background: #e0e0e0; }
+    button { padding: 6px 14px; font-size: 13px; cursor: pointer; margin-right: 6px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 12px; }
+    .badge-ok   { background: #c8f7c5; color: #1a7a1a; }
+    .badge-run  { background: #fff3c4; color: #8a6d00; }
+    .badge-fail { background: #fdd; color: #a00; }
+    #log { background: #222; color: #0f0; padding: 12px; font-size: 12px; height: 160px;
+           overflow-y: auto; white-space: pre-wrap; border-radius: 4px; }
+    .row { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    .val { font-size: 22px; font-weight: bold; }
+    .label { font-size: 12px; color: #666; }
+    .card { background: #fff; border: 1px solid #ccc; border-radius: 6px;
+            padding: 16px 20px; min-width: 150px; text-align: center; }
+  </style>
+</head>
+<body>
+
+<h1>read-compass-batch — 모니터링 화면</h1>
+<p class="desc">배치 Job이 tb_*_rankings 테이블에 스냅샷을 적재합니다. 아래 버튼으로 잡을 즉시 실행하거나 자동 폴링을 켜서 반영 결과를 확인하세요. (GET /status)</p>
+
+<!-- ===== 스냅샷 카드 ===== -->
+<h2>최신 랭킹 스냅샷</h2>
+<div class="row">
+  <div class="card"><div class="label">인기 도서</div><div class="val" id="bookTotal">-</div></div>
+  <div class="card"><div class="label">인기 리뷰</div><div class="val" id="reviewTotal">-</div></div>
+  <div class="card"><div class="label">파워 유저</div><div class="val" id="userTotal">-</div></div>
+  <div class="card"><div class="label">최근 잡 상태</div><div class="val" id="lastStatus">-</div></div>
+</div>
+<div style="font-size:13px; margin-bottom:12px;">
+  최신 산출 시각: <strong id="latestCalc">-</strong>
+  &nbsp;|&nbsp;
+  조회 시각: <strong id="fetchedAt">-</strong>
+</div>
+
+<!-- ===== 실행 버튼 ===== -->
+<div class="row">
+  <button onclick="fetchStatus()">📊 지금 조회</button>
+  <button onclick="runJob('rankingJob')">▶ rankingJob 실행</button>
+  <button onclick="runJob('maintenanceJob')">▶ maintenanceJob 실행</button>
+  <button onclick="togglePoll()" id="pollBtn">▶ 자동 폴링 ON (3초)</button>
+  <span id="pollStatus" style="font-size:12px; color:#666;"></span>
+</div>
+
+<!-- ===== 기간별 적재 건수 ===== -->
+<h2>기간별 적재 건수 (최신 스냅샷)</h2>
+<table>
+  <thead><tr><th>구분</th><th>DAILY</th><th>WEEKLY</th><th>MONTHLY</th><th>ALL_TIME</th><th>합계</th></tr></thead>
+  <tbody id="periodBody">
+    <tr><td colspan="6" style="text-align:center; color:#999;">데이터 없음</td></tr>
+  </tbody>
+</table>
+
+<!-- ===== 최근 실행 이력 ===== -->
+<h2>최근 실행 이력 (BATCH_JOB_EXECUTION)</h2>
+<table>
+  <thead><tr><th>Job</th><th>상태</th><th>ExitCode</th><th>시작</th><th>소요(ms)</th></tr></thead>
+  <tbody id="execBody">
+    <tr><td colspan="5" style="text-align:center; color:#999;">실행 이력 없음</td></tr>
+  </tbody>
+</table>
+
+<!-- ===== 콘솔 로그 ===== -->
+<h2>콘솔 로그</h2>
+<div id="log"></div>
+<button style="margin-top:6px;" onclick="document.getElementById('log').textContent=''">🗑 로그 지우기</button>
+
+<!-- ===== API 응답 Raw ===== -->
+<h2>API 응답 Raw (GET /status)</h2>
+<pre id="raw" style="background:#fff; border:1px solid #ccc; padding:12px; font-size:13px; min-height:60px;">-</pre>
+
+<script>
+  let pollTimer = null;
+  const PERIODS = ['DAILY', 'WEEKLY', 'MONTHLY', 'ALL_TIME'];
+
+  function appendLog(msg) {
+    const el = document.getElementById('log');
+    const now = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+    el.textContent += `[${now}] ${msg}\n`;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function statusBadge(status) {
+    if (!status) return '<span class="badge">-</span>';
+    const s = String(status).toUpperCase();
+    const cls = s === 'COMPLETED' ? 'badge-ok'
+              : (s === 'STARTING' || s === 'STARTED') ? 'badge-run'
+              : 'badge-fail';
+    return `<span class="badge ${cls}">${s}</span>`;
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    return isNaN(d) ? iso : d.toLocaleString('ko-KR');
+  }
+
+  async function fetchStatus() {
+    appendLog('GET /status 호출...');
+    try {
+      const res = await axios.get('/status');
+      const d = res.data;
+      const r = d.rankings || {};
+
+      document.getElementById('bookTotal').textContent   = (r.book   && r.book.total)   ?? 0;
+      document.getElementById('reviewTotal').textContent = (r.review && r.review.total) ?? 0;
+      document.getElementById('userTotal').textContent   = (r.user   && r.user.total)   ?? 0;
+
+      const execs = d.recentExecutions || [];
+      document.getElementById('lastStatus').innerHTML =
+        execs.length ? statusBadge(execs[0].status) : '<span class="badge">없음</span>';
+
+      const latest = (r.book && r.book.latestCalculatedAt)
+                  || (r.review && r.review.latestCalculatedAt)
+                  || (r.user && r.user.latestCalculatedAt);
+      document.getElementById('latestCalc').textContent = fmtTime(latest);
+      document.getElementById('fetchedAt').textContent =
+        new Date().toLocaleTimeString('ko-KR', { hour12: false });
+
+      renderPeriods(r);
+      renderExecs(execs);
+
+      document.getElementById('raw').textContent = JSON.stringify(d, null, 2);
+      appendLog(`응답 OK — book=${r.book?.total ?? 0}, review=${r.review?.total ?? 0}, user=${r.user?.total ?? 0}`);
+    } catch (e) {
+      appendLog(`오류: ${e.message}`);
+      document.getElementById('raw').textContent = String(e);
+    }
+  }
+
+  function renderPeriods(r) {
+    const rows = [
+      ['인기 도서', r.book],
+      ['인기 리뷰', r.review],
+      ['파워 유저', r.user],
+    ];
+    let html = '';
+    let hasData = false;
+    for (const [label, snap] of rows) {
+      const bp = (snap && snap.byPeriod) || {};
+      const cells = PERIODS.map(p => bp[p] ?? 0);
+      const sum = snap && snap.total ? snap.total : 0;
+      if (sum > 0) hasData = true;
+      html += `<tr><td>${label}</td>` + cells.map(c => `<td>${c}</td>`).join('') + `<td><strong>${sum}</strong></td></tr>`;
+    }
+    document.getElementById('periodBody').innerHTML =
+      hasData ? html : '<tr><td colspan="6" style="text-align:center; color:#999;">데이터 없음</td></tr>';
+  }
+
+  function renderExecs(execs) {
+    if (!execs.length) {
+      document.getElementById('execBody').innerHTML =
+        '<tr><td colspan="5" style="text-align:center; color:#999;">실행 이력 없음</td></tr>';
+      return;
+    }
+    document.getElementById('execBody').innerHTML = execs.map(e =>
+      `<tr><td>${e.jobName ?? '-'}</td><td>${statusBadge(e.status)}</td>`
+      + `<td>${e.exitCode ?? '-'}</td><td>${fmtTime(e.startTime)}</td>`
+      + `<td>${e.durationMs ?? '-'}</td></tr>`
+    ).join('');
+  }
+
+  async function runJob(job) {
+    appendLog(`POST /run?job=${job} ...`);
+    try {
+      const res = await axios.post('/run', null, { params: { job } });
+      appendLog(`수락됨: ${res.data.message ?? job}`);
+      // 잡이 비동기로 도는 동안 잠시 후 두 번 새로고침해 반영 결과를 본다.
+      setTimeout(fetchStatus, 800);
+      setTimeout(fetchStatus, 2500);
+    } catch (e) {
+      appendLog(`실행 오류: ${e.message}`);
+    }
+  }
+
+  function togglePoll() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      document.getElementById('pollBtn').textContent = '▶ 자동 폴링 ON (3초)';
+      document.getElementById('pollStatus').textContent = '';
+      appendLog('자동 폴링 중지');
+    } else {
+      fetchStatus();
+      pollTimer = setInterval(fetchStatus, 3000);
+      document.getElementById('pollBtn').textContent = '⏹ 자동 폴링 OFF';
+      document.getElementById('pollStatus').textContent = '3초마다 자동 조회 중...';
+      appendLog('자동 폴링 시작 (3초 간격)');
+    }
+  }
+
+  // 페이지 로드 시 1회 자동 조회
+  fetchStatus();
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: read-compass-batch
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 스키마는 메인 프로젝트(schema.sql)가 소유한다. 배치는 검증만 한다.
+      ddl-auto: validate
+    properties:
+      hibernate:
+        physical_naming_strategy: org.hibernate.boot.model.naming.CamelCaseToUnderscoresNamingStrategy
+        jdbc.time_zone: UTC
+
+  batch:
+    # 잡 자동 실행 비활성화 — 스케줄러/StartupJobRunner 가 직접 실행한다.
+    job:
+      enabled: false
+    jdbc:
+      # 배치 메타데이터 테이블(BATCH_*)을 공유 RDB 에 멱등하게 생성한다.
+      initialize-schema: always
+      schema: classpath:db/schema-batch-postgresql.sql
+
+# 배치 동작 파라미터
+batch:
+  run-on-startup: ${BATCH_RUN_ON_STARTUP:false}
+  scheduler:
+    enabled: ${BATCH_SCHEDULER_ENABLED:true}
+    zone: ${BATCH_SCHEDULER_ZONE:Asia/Seoul}            # 스케줄 타임존
+    ranking-cron: ${BATCH_RANKING_CRON:0 0 3 * * *}     # 랭킹 산출 (기본 매일 03:00)
+    maintenance-cron: ${BATCH_MAINTENANCE_CRON:0 0 4 * * *} # 유지보수 (기본 매일 04:00)
+  ranking:
+    book-top-n: ${BATCH_BOOK_TOP_N:4}          # 인기 도서 적재 건수
+    review-top-n: ${BATCH_REVIEW_TOP_N:10}      # 인기 리뷰 적재 건수
+    user-top-n: ${BATCH_USER_TOP_N:10}          # 파워 유저 적재 건수
+    notify-top-rank: ${BATCH_NOTIFY_TOP_RANK:10} # 인기 리뷰 알림 발송 상위 순위
+  cleanup:
+    notification-retention-days: ${BATCH_NOTI_RETENTION_DAYS:7} # 확인된 알림 보관일수
+    user-grace-days: ${BATCH_USER_GRACE_DAYS:1}                 # 논리삭제 유저 물리삭제 유예일수
+
+# 커스텀 메트릭 노출 (심화: Actuator 모니터링)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,batch
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.rc.readcompassbatch: info
+    org.springframework.batch: info

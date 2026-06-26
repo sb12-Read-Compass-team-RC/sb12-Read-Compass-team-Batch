@@ -6,11 +6,17 @@ plugins {
 
 group = 'com.rc'
 version = '0.0.1-SNAPSHOT'
-description = 'Read-Compass-Batch'
+description = 'read-compass-batch'
 
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
     }
 }
 
@@ -19,20 +25,45 @@ repositories {
 }
 
 dependencies {
+    // 배치 + JPA + 검증
     implementation 'org.springframework.boot:spring-boot-starter-batch'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
-    compileOnly 'org.projectlombok:lombok'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // 웹 서버 - Actuator 엔드포인트를 HTTP(8081)로 노출하기 위해 필요
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // 배치 작업 모니터링(커스텀 메트릭 노출) - 심화 요구사항
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // PostgreSQL (RDB)
     runtimeOnly 'org.postgresql:postgresql'
+
+    // UUID v7 (메인 프로젝트와 동일한 ID 생성 전략)
+    implementation 'com.fasterxml.uuid:java-uuid-generator:5.1.0'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
-    testImplementation 'org.springframework.boot:spring-boot-starter-batch-test'
-    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
-    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
-    testCompileOnly 'org.projectlombok:lombok'
+
+    // 테스트
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.batch:spring-batch-test'
+    testRuntimeOnly 'com.h2database:h2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testCompileOnly 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+/* ===== UTF-8 강제 ===== */
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+tasks.withType(Test).configureEach {
+    systemProperty 'file.encoding', 'UTF-8'
 }

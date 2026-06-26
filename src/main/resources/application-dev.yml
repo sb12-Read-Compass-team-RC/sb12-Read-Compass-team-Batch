@@ -1,0 +1,24 @@
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/readcompass}
+    driver-class-name: org.postgresql.Driver
+    username: ${DB_USERNAME:user1}
+    password: ${DB_PASSWORD:1234}
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true
+
+# 메인 프로젝트는 8080 을 사용하므로 배치는 8081 을 사용한다.
+# (두 앱은 같은 DB 를 공유할 뿐, 서로 다른 프로세스/포트로 동시에 실행된다.)
+server:
+  port: ${SERVER_PORT:8081}
+
+logging:
+  level:
+    com.rc.batch: debug
+    org.hibernate.SQL: debug

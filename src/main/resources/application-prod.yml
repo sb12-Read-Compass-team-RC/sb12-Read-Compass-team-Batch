@@ -1,0 +1,29 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+
+server:
+  port: ${SERVER_PORT:8081}
+
+# (심화) 날짜별 로그 S3 적재용 설정 placeholder.
+# 별도 logback appender 또는 사이드카로 적재한다. README 참고.
+aws:
+  region: ${AWS_REGION:ap-northeast-2}
+  s3:
+    bucket: ${AWS_S3_BUCKET:}
+    log-prefix: ${AWS_S3_LOG_PREFIX:batch-logs/}
+
+logging:
+  level:
+    com.rc.batch: info
