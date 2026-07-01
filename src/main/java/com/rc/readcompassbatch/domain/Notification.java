@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.UUID;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -39,4 +40,7 @@ public class Notification extends BaseEntity {
     @Builder.Default
     @Column(nullable = false)
     private boolean confirmed = false;
+
+    @Column(name = "confirmed_at", updatable = false)
+    private Instant confirmedAt;
 }

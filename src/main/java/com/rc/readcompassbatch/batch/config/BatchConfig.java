@@ -73,11 +73,9 @@ public class BatchConfig {
     @Bean
     public Job maintenanceJob() {
         return new JobBuilder(MAINTENANCE_JOB, jobRepository)
-            .start(userHardDeleteStep())
+            .start(notificationCleanupStep())
+            .next(userHardDeleteStep())
             .build();
-//            .start(notificationCleanupStep())
-//            .next(userHardDeleteStep())
-//            .build();
     }
 
     @Bean
