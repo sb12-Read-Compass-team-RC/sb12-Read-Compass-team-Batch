@@ -16,7 +16,7 @@
 | 파워 유저 | `tb_user_rankings` | `작성 리뷰 인기점수합 * 0.5 + 참여 좋아요 * 0.2 + 참여 댓글 * 0.3` |
 
 - 한 번의 실행에서 네 기간이 동일한 `calculated_at` 타임스탬프로 저장됩니다. 조회 API는 `period_type`별 최신 `calculated_at`을 읽으면 됩니다.
-- 랭킹 산출 시 **논리 삭제된 리뷰/댓글도 포함**합니다(집계 쿼리에 `is_deleted` 필터 없음 — 의도된 동작).
+- 랭킹 산출 시 **논리 삭제된 리뷰/댓글도 포함**합니다
 - 각 기간 TOP 10 리뷰 작성자에게 `REVIEW_RANKED` 알림을 생성합니다.
 
 **유지보수 (`maintenanceJob`)**
@@ -82,3 +82,19 @@
 ## 스택
 
 Spring Boot 4.1.0 · Spring Batch 6 · Java 17 · Gradle 9.5.1 · PostgreSQL · UUID v7
+
+## 흐름
+
+① 누가 깨우나        scheduler/  (3가지 방법)
+│
+② 실행 진입점        scheduler/BatchJobLauncher
+│           JobOperator.start(job, 파라미터)
+③ 잡 정의            batch/config/BatchConfig
+│           rankingJob, maintenanceJob
+④ 각 단계(Step)      batch/tasklet/  (얇은 껍데기)
+│
+⑤ 실제 로직 ★        service/  ← 여기가 핵심
+│           RankingService, MaintenanceService
+⑥ 쿼리               repository/
+│
+⑦ 공유 RDB           tb_reviews 읽기 → tb_*_rankings 쓰기
