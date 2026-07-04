@@ -40,4 +40,14 @@ public class BatchScheduler {
         log.info("[Scheduler] maintenance job triggered");
         launcher.runMaintenance();
     }
+
+    /** 카운트 보정 (기본 10분마다). */
+    @Scheduled(
+            cron = "${batch.scheduler.count-sync-cron}",
+            zone = "${batch.scheduler.zone:Asia/Seoul}"
+    )
+    public void scheduleCountSync() {
+        log.info("[Scheduler] count sync job triggered");
+        launcher.runCountSync();
+    }
 }

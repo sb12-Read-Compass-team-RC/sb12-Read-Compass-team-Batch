@@ -38,6 +38,7 @@
   <div class="card"><div class="label">인기 리뷰</div><div class="val" id="reviewTotal">-</div></div>
   <div class="card"><div class="label">파워 유저</div><div class="val" id="userTotal">-</div></div>
   <div class="card"><div class="label">최근 잡 상태</div><div class="val" id="lastStatus">-</div></div>
+  <div class="card"><div class="label">카운트 불일치</div><div class="val" id="countSyncMismatch">-</div></div>
 </div>
 <div style="font-size:13px; margin-bottom:12px;">
   최신 산출 시각: <strong id="latestCalc">-</strong>
@@ -50,6 +51,7 @@
   <button onclick="fetchStatus()">📊 지금 조회</button>
   <button onclick="runJob('rankingJob')">▶ rankingJob 실행</button>
   <button onclick="runJob('maintenanceJob')">▶ maintenanceJob 실행</button>
+  <button onclick="runJob('countSyncJob')">▶ countSyncJob 실행</button>
   <button onclick="togglePoll()" id="pollBtn">▶ 자동 폴링 ON (3초)</button>
   <span id="pollStatus" style="font-size:12px; color:#666;"></span>
 </div>
@@ -62,6 +64,25 @@
     <tr><td colspan="6" style="text-align:center; color:#999;">데이터 없음</td></tr>
   </tbody>
 </table>
+
+<!-- ===== 카운트 보정 현황 ===== -->
+<h2>카운트 보정 현황 (countSyncJob)</h2>
+
+<table>
+  <thead>
+  <tr>
+    <th>항목</th>
+    <th>불일치 대상 수</th>
+    <th>설명</th>
+  </tr>
+  </thead>
+  <tbody id="countSyncBody">
+  <tr>
+    <td colspan="3" style="text-align:center; color:#999;">데이터 없음</td>
+  </tr>
+  </tbody>
+</table>
+
 
 <!-- ===== 최근 실행 이력 ===== -->
 <h2>최근 실행 이력 (BATCH_JOB_EXECUTION)</h2>
@@ -130,14 +151,52 @@
         new Date().toLocaleTimeString('ko-KR', { hour12: false });
 
       renderPeriods(r);
+      renderCountSync(d.countSync || {});
       renderExecs(execs);
 
       document.getElementById('raw').textContent = JSON.stringify(d, null, 2);
-      appendLog(`응답 OK — book=${r.book?.total ?? 0}, review=${r.review?.total ?? 0}, user=${r.user?.total ?? 0}`);
+      appendLog(`응답 OK — book=${r.book?.total ?? 0}, review=${r.review?.total ?? 0}, user=${r.user?.total ?? 0}, countMismatch=${d.countSync?.totalMismatch ?? 0}`
+      );
     } catch (e) {
       appendLog(`오류: ${e.message}`);
       document.getElementById('raw').textContent = String(e);
     }
+  }
+
+  function renderCountSync(c) {
+    const totalMismatch = c.totalMismatch ?? 0;
+
+    document.getElementById('countSyncMismatch').innerHTML =
+            totalMismatch === 0
+                    ? '<span class="badge badge-ok">정상</span>'
+                    : `<span class="badge badge-fail">${totalMismatch}</span>`;
+
+    const rows = [
+      [
+        '도서 리뷰 수',
+        c.bookReviewCountMismatch ?? 0,
+        'tb_books.review_cnt와 실제 tb_reviews 수 비교'
+      ],
+      [
+        '리뷰 좋아요 수',
+        c.reviewLikeCountMismatch ?? 0,
+        'tb_reviews.like_cnt와 실제 tb_review_likes 수 비교'
+      ],
+      [
+        '리뷰 댓글 수',
+        c.reviewCommentCountMismatch ?? 0,
+        'tb_reviews.comment_cnt와 실제 tb_comments 수 비교'
+      ]
+    ];
+
+    document.getElementById('countSyncBody').innerHTML = rows.map(row => {
+      const [label, count, desc] = row;
+      const badge = count === 0
+              ? '<span class="badge badge-ok">0</span>'
+              : `<span class="badge badge-fail">${count}</span>`;
+
+      return `<tr><td>${label}</td><td>${badge}</td><td>${desc}</td></tr>`;
+    }).join('');
   }
 
   function renderPeriods(r) {

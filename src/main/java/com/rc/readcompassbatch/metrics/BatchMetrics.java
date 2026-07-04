@@ -35,4 +35,8 @@ public class BatchMetrics {
     public void recordUsersDeleted(int count) {
         registry.counter("deokhugam.batch.users.deleted").increment(count);
     }
+
+    public void recordCountsSynced(String type, int count) {
+        registry.counter("deokhugam.batch.counts.synced", "type", type).increment(count);
+    }
 }
