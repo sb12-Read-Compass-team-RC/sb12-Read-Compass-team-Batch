@@ -23,6 +23,7 @@ public class BatchJobLauncher {
     private final JobOperator jobOperator;
     private final Job rankingJob;
     private final Job maintenanceJob;
+    private final Job countSyncJob;
 
     public void runRanking() {
         run(rankingJob);
@@ -30,6 +31,10 @@ public class BatchJobLauncher {
 
     public void runMaintenance() {
         run(maintenanceJob);
+    }
+
+    public void runCountSync() {
+        run(countSyncJob);
     }
 
     private void run(Job job) {
@@ -50,6 +55,8 @@ public class BatchJobLauncher {
         switch (jobName) {
             case BatchConfig.RANKING_JOB -> runRanking();
             case BatchConfig.MAINTENANCE_JOB -> runMaintenance();
+            case BatchConfig.COUNT_SYNC_JOB -> runCountSync();
+
             default -> log.warn("[Batch] unknown job name: {}", jobName);
         }
     }

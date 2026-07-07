@@ -31,6 +31,7 @@ batch:
     zone: ${BATCH_SCHEDULER_ZONE:Asia/Seoul}            # 스케줄 타임존
     ranking-cron: ${BATCH_RANKING_CRON:0 0 3 * * *}     # 랭킹 산출 (기본 매일 03:00)
     maintenance-cron: ${BATCH_MAINTENANCE_CRON:0 0 4 * * *} # 유지보수 (기본 매일 04:00)
+    count-sync-cron: ${BATCH_COUNT_SYNC_CRON:0 0 2 * * *} # count 값 보정 (기본 매일 02:00)
   ranking:
     book-top-n: ${BATCH_BOOK_TOP_N:4}          # 인기 도서 적재 건수
     review-top-n: ${BATCH_REVIEW_TOP_N:10}      # 인기 리뷰 적재 건수

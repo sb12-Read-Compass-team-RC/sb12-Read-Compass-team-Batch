@@ -1,10 +1,6 @@
 package com.rc.readcompassbatch.batch.config;
 
-import com.rc.readcompassbatch.batch.tasklet.BookRankingTasklet;
-import com.rc.readcompassbatch.batch.tasklet.NotificationCleanupTasklet;
-import com.rc.readcompassbatch.batch.tasklet.ReviewRankingTasklet;
-import com.rc.readcompassbatch.batch.tasklet.UserHardDeleteTasklet;
-import com.rc.readcompassbatch.batch.tasklet.UserRankingTasklet;
+import com.rc.readcompassbatch.batch.tasklet.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
@@ -28,6 +24,7 @@ public class BatchConfig {
 
     public static final String RANKING_JOB = "rankingJob";
     public static final String MAINTENANCE_JOB = "maintenanceJob";
+    public static final String COUNT_SYNC_JOB = "countSyncJob";
 
     private final JobRepository jobRepository;
     private final PlatformTransactionManager transactionManager;
@@ -37,6 +34,7 @@ public class BatchConfig {
     private final UserRankingTasklet userRankingTasklet;
     private final NotificationCleanupTasklet notificationCleanupTasklet;
     private final UserHardDeleteTasklet userHardDeleteTasklet;
+    private final CountSyncTasklet countSyncTasklet;
 
     // ===== Ranking Job =====
     @Bean
@@ -91,4 +89,21 @@ public class BatchConfig {
             .tasklet(userHardDeleteTasklet, transactionManager)
             .build();
     }
+
+    // ===== Count Sync Job =====
+    @Bean
+    public Job countSyncJob() {
+        return new JobBuilder(COUNT_SYNC_JOB, jobRepository)
+                .start(countSyncStep())
+                .build();
+    }
+
+    @Bean
+    public Step countSyncStep() {
+        return new StepBuilder("countSyncStep", jobRepository)
+                .tasklet(countSyncTasklet, transactionManager)
+                .build();
+    }
+
+
 }
